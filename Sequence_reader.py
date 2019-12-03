@@ -1,6 +1,4 @@
-import re
 import numpy as np
-import sys
 from collections import Counter
 import pandas
 
@@ -9,10 +7,12 @@ from HMM_errors import *
 
 class SequenceReader:
     """
+    This class builds HMM from  protein or DNA sequence alignment.
+
 
     """
 
-    def __init__(self, path_to_file, amino_acids=True, *args, **kwargs):
+    def __init__(self, path_to_file, amino_acids=True, deletion_sign="-"):
 
         alignment_list = []
 
@@ -26,41 +26,61 @@ class SequenceReader:
         self.alignment_list = alignment_list
         self.alignment_len = len(alignment_list)
 
-        self.position_list = list(map(list, zip(*alignment_list)))
+        self.position_list = SequenceReader.transpose(alignment_list)
         self.position_len = len(self.position_list)
+
+        self.deletion_sign = deletion_sign
 
         self.alignment_alphabet = (
             "A", "R", "N", "D", "C", "E", "Q", "G", "H", "I", "L", "K", "M", "F", "P", "S", "T", "W", "Y",
-            "V") if amino_acids else ("A", "C", "G", "T", "U")
+            "V") if amino_acids else ("A", "C", "G", "T")
 
-        self.calculate_emissions(*args, **kwargs)
-        self.calculate_transitions(*args, **kwargs)
+        self.true_seq, self.match_emission, self.insert_emission = self.calculate_emissions()
+        self.L = len(self.true_seq)
+        self.trans = self.calculate_transitions()
 
-    def calculate_transitions(self, *args, **kwargs):
+    def calculate_transitions(self):
+        match_transition = {"M": [0] * (self.L + 1), "D": [0] * (self.L + 1), "I": [0] * (self.L + 1)}
+        insert_transition = {"M": [0] * (self.L + 1), "D": [0] * (self.L + 1), "I": [0] * (self.L + 1)}
+        delete_transition = {"M": [float('nan')] + ([0] * self.L), "D": [float('nan')] + ([0] * self.L),
+                             "I": [float('nan')] + ([0] * self.L)}
 
+        trans = {"M": match_transition, "D": delete_transition, "I": insert_transition}
 
+        for alignment_i, sequence in enumerate(self.alignment_list):
+            last_seq_position = 0
+            first_transition_index = "M"
 
+            for true_seq_i, x in enumerate(self.true_seq):
+                self.process_transitions(sequence, trans, last_seq_position, x, true_seq_i, first_transition_index)
+                first_transition_index = "D" if sequence[x] == self.deletion_sign else "M"
+                last_seq_position = x + 1
+            else:
+                if last_seq_position != 0:
+                    true_seq_i += 1
+                    self.process_transitions(sequence, trans, last_seq_position, len(sequence), true_seq_i,
+                                             first_transition_index)
+        return trans
 
+    def process_insertion(self, insertion, insert_transition, sequence_sign, true_seq_i):
+        last_transition_index = "D" if sequence_sign == self.deletion_sign else "M"
+        if insertion:
+            insert_transition["I"][true_seq_i] += len(insertion) - 1
+            insert_transition[last_transition_index][true_seq_i] += 1
+            last_transition_index = "I"
+        return last_transition_index
 
-
-        for i, letter in enumerate(self.alignment_list):
-            before_seq = SequenceReader.clear_list(letter[0:self.true_seq[0]])
-
-
-
-
-
-
-        for x, y in SequenceReader.pairwise(self.true_seq):
-            for sequence in self.alignment_list:
-                pass
+    def process_transitions(self, sequence, trans, last_seq_position, x, true_seq_i, first_transition_index):
+        insertion = SequenceReader.clear_list(sequence[last_seq_position:x])
+        sign_in_sequence = sequence[x] if x < len(sequence) else True
+        last_transition_index = self.process_insertion(insertion, trans["I"], sign_in_sequence, true_seq_i)
+        trans[first_transition_index][last_transition_index][true_seq_i] += 1
 
     def calculate_emissions(self, deletion_sign="-", treshold=0.5):
-
         true_seq = []
 
-        mE = []
-        iE = []
+        match_emission = []
+        insert_emission = []
 
         full_occurrence_count = {}
 
@@ -70,20 +90,19 @@ class SequenceReader:
 
             deletion_count = current_occurrence_count.get(deletion_sign, 0)
 
-            if deletion_count / self.alignment_len > treshold:
-                mE.append(self.build_count_column(current_occurrence_count))
-                iE.append(self.build_count_column(full_occurrence_count))
+            if deletion_count / self.alignment_len < treshold:
+                match_emission.append(self.build_count_column(current_occurrence_count))
+                insert_emission.append(self.build_count_column(full_occurrence_count))
                 true_seq.append(i)
                 full_occurrence_count = {}
             else:
                 full_occurrence_count = Counter(full_occurrence_count) + Counter(current_occurrence_count)
         else:
-            iE.append(self.build_count_column(full_occurrence_count))
+            insert_emission.append(self.build_count_column(full_occurrence_count))
 
         self.L = len(true_seq)
-        self.true_seq = true_seq
-        self.mE = mE
-        self.iE = iE
+
+        return true_seq, match_emission, insert_emission
 
     def build_count_column(self, occurrence_count):
         match_column = []
@@ -102,5 +121,13 @@ class SequenceReader:
         return zip(a, b)
 
     @staticmethod
-    def clear_list(list_to_clear, element_to_delete = "-"):
+    def transpose(iterable):
+        return list(map(list, zip(*iterable)))
+
+    @staticmethod
+    def clear_list(list_to_clear, element_to_delete="-"):
         return [x for x in list_to_clear if x != element_to_delete]
+
+
+test = SequenceReader("test.txt", amino_acids=False)
+test2 = SequenceReader("test2.txt", amino_acids=False)
