@@ -2,6 +2,7 @@ import numpy as np
 from collections import Counter
 import pandas as pd
 from math import log10
+import matplotlib.pyplot as plt
 
 from HMM_errors import *
 
@@ -203,50 +204,50 @@ class SequenceReader:
         return dict_to_divide
 
 
+def plot_matrix(title, data):
+    fig = plt.figure(figsize=(10, 6))
+    plt.plot(data, linestyle="", marker="o")
+    plt.title(title)
+
+    fig = plt.gcf()
+    fig.savefig('plots/{}.png'.format(title.replace(" ", "_")))
+    plt.show()
+
+
+def plot_model(model, name, position):
+    print("{} model len: {}".format(name, model.L))
+    print("{} T, mE, iE shapes: {},{},{}".format(name, (9, len(model.trans["M"]["M"])), model.match_emission.shape,
+                                                 model.insert_emission.shape))
+
+    print("----------Position {} of {} HMM model.------------".format(position, name))
+    plot_matrix("Position {} of {} HMM model: Match emission".format(position, name),
+                model.match_emission.loc[:, position])
+    plot_matrix("Position {} of {} HMM model: Insert emission".format(position, name),
+                model.insert_emission.loc[:, position])
+
+    trans_table = []
+    trans_names = []
+    for x1, y1 in model.trans.items():
+        for x2, y2 in y1.items():
+            print("{}-{}: {}".format(x1, x2, y2[50]))
+            trans_table.append([y2[50]])
+            trans_names.append("{}-{}".format(x1, x2))
+
+
+    trans_df =  pd.DataFrame(trans_table,index=trans_names)
+    print(trans_df)
+    plot_matrix("Position {} of {} HMM model: Transitions".format(position, name), trans_df)
+
+
 def main():
     atp = SequenceReader("ATPases.txt")
     gtp = SequenceReader("GTP_binding_proteins.txt")
 
-    print("ATPase model len: {}\n GTP model len: {}".format(atp.L, gtp.L))
-    print("ATPase T, mE, iE shapes: {},{},{}\n GTP T, mE, iE shapes: {},{},{}".format((9, len(atp.trans["M"]["M"])),
-                                                                                      atp.match_emission.shape,
-                                                                                      atp.insert_emission.shape,
-                                                                                      (9, len(gtp.trans["M"]["M"])),
-                                                                                      gtp.match_emission.shape,
-                                                                                      gtp.insert_emission.shape))
-
-    print("----------Position 50 of ATPases HMM model.------------")
-    print("Match emission: {}".format(atp.match_emission.loc[:, 50]))
-    print("Insert emission: {}".format(atp.insert_emission.loc[:, 50]))
-    for x1, y1 in atp.trans.items():
-        for x2, y2 in y1.items():
-            print("{}-{}: {}".format(x1, x2, y2[50]))
-
-    print("----------Position 50 of GTP binding proteins HMM model.------------")
-    print("Match emission: {}".format(gtp.match_emission.loc[:, 50]))
-    print("Insert emission: {}".format(gtp.insert_emission.loc[:, 50]))
-    for x1, y1 in gtp.trans.items():
-        for x2, y2 in y1.items():
-            print("{}-{}: {}".format(x1, x2, y2[50]))
-
-    print("----------Position 49 of ATPases HMM model.------------")
-    print("Match emission: {}".format(atp.match_emission.loc[:, 49]))
-    print("Insert emission: {}".format(atp.insert_emission.loc[:, 49]))
-    for x1, y1 in atp.trans.items():
-        for x2, y2 in y1.items():
-            print("{}-{}: {}".format(x1, x2, y2[49]))
-
-    print("----------Position 49 of GTP binding proteins HMM model.------------")
-    print("Match emission: {}".format(gtp.match_emission.loc[:, 49]))
-    print("Insert emission: {}".format(gtp.insert_emission.loc[:, 49]))
-    for x1, y1 in gtp.trans.items():
-        for x2, y2 in y1.items():
-            print("{}-{}: {}".format(x1, x2, y2[49]))
+    for position in [49, 50]:
+        for model, name in [(atp, "ATPases"), (gtp, "GTP binding proteins")]:
+            plot_model(model, name, position)
 
     y = []
-
-    import matplotlib.pyplot as plt
-
     with open("Unclassified_proteins.txt") as file:
         for line in file:
             atp_score = atp.forward(line.strip())
@@ -275,5 +276,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # execute only if run as a script
     main()
